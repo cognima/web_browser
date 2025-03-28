@@ -1,0 +1,17 @@
+{
+  "name": "webrtc-puppeteer-stream",
+  "version": "1.0.0",
+  "description": "Streaming de um navegador headless com Puppeteer e WebRTC.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "latest",
+    "puppeteer": "latest",
+    "socket.io": "latest",
+    "simple-peer": "latest"
+  },
+  "author": "Hiudy",
+  "license": "MIT"
+}
