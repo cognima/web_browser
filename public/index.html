@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Navegador Remoto</title>
+    <style>
+        #screen { width: 100%; height: auto; cursor: crosshair; }
+    </style>
+</head>
+<body>
+    <input type="text" id="url" placeholder="Digite uma URL">
+    <button onclick="navigate()">Ir</button>
+    <br>
+    <img id="screen">
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const screen = document.getElementById("screen");
+
+        function navigate() {
+            const url = document.getElementById("url").value;
+            socket.emit("navigate", url);
+        }
+
+        socket.on("updateScreen", (data) => {
+            screen.src = "data:image/png;base64," + data;
+        });
+
+        screen.addEventListener("mousemove", (event) => {
+            const rect = screen.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+            socket.emit("mouseMove", { x, y });
+        });
+
+        screen.addEventListener("click", () => {
+            socket.emit("mouseClick");
+        });
+
+        document.addEventListener("keydown", (event) => {
+            socket.emit("keyPress", event.key);
+        });
+    </script>
+</body>
+</html>
