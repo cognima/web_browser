@@ -22,7 +22,6 @@
         }
     </script>
     <style>
-        /* Custom styles */
         .settings-panel {
             max-height: 0;
             overflow: hidden;
@@ -31,9 +30,27 @@
         .settings-panel.open {
             max-height: 500px;
         }
+        .text-input-panel {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+        .text-input-panel.open {
+            max-height: 200px;
+        }
+        .notification {
+            transition: opacity 0.3s ease-in-out;
+        }
     </style>
 </head>
 <body class="bg-gray-100 font-sans min-h-screen">
+    <!-- Notification Area -->
+    <div id="notification" class="fixed top-4 right-4 max-w-sm opacity-0 transition-opacity duration-300">
+        <div class="bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg">
+            <p id="notificationText"></p>
+        </div>
+    </div>
+
     <!-- Navigation Bar -->
     <nav class="bg-white shadow-md">
         <div class="container mx-auto px-4 py-3">
@@ -42,10 +59,16 @@
                     <i class="fas fa-globe text-blue-600 text-2xl"></i>
                     <h1 class="text-xl font-semibold text-gray-800">Remote Browser</h1>
                 </div>
-                <button id="settingsToggle" class="flex items-center space-x-2 px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
-                    <i class="fas fa-cog text-gray-600"></i>
-                    <span class="text-gray-600">Settings</span>
-                </button>
+                <div class="flex space-x-2">
+                    <button id="textInputToggle" class="flex items-center space-x-2 px-4 py-2 bg-green-100 rounded-lg hover:bg-green-200 transition-colors">
+                        <i class="fas fa-keyboard text-green-600"></i>
+                        <span class="text-green-600">Text Input</span>
+                    </button>
+                    <button id="settingsToggle" class="flex items-center space-x-2 px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                        <i class="fas fa-cog text-gray-600"></i>
+                        <span class="text-gray-600">Settings</span>
+                    </button>
+                </div>
             </div>
         </div>
     </nav>
@@ -65,10 +88,29 @@
             </div>
         </div>
 
+        <!-- Text Input Panel -->
+        <div id="textInputPanel" class="text-input-panel bg-white rounded-lg shadow-md mb-4">
+            <div class="p-4">
+                <h2 class="text-lg font-semibold mb-4">Text Input</h2>
+                <div class="flex flex-col space-y-2">
+                    <textarea id="textInput" rows="3" placeholder="Type your text here..."
+                            class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"></textarea>
+                    <div class="flex space-x-2">
+                        <button onclick="sendText()" class="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                            <i class="fas fa-paper-plane mr-2"></i>Send Text
+                        </button>
+                        <button onclick="clearText()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
+                            <i class="fas fa-times mr-2"></i>Clear
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Settings Panel -->
         <div id="settingsPanel" class="settings-panel bg-white rounded-lg shadow-md mb-4">
             <div class="p-4">
-                <h2 class="text-lg font-semibold mb-4">Puppeteer Settings</h2>
+                <h2 class="text-lg font-semibold mb-4">Browser Settings</h2>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <!-- Headless Mode -->
                     <div class="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
@@ -132,11 +174,39 @@
         const loadingOverlay = document.getElementById('loadingOverlay');
         const settingsPanel = document.getElementById('settingsPanel');
         const settingsToggle = document.getElementById('settingsToggle');
+        const textInputPanel = document.getElementById('textInputPanel');
+        const textInputToggle = document.getElementById('textInputToggle');
+        const notification = document.getElementById('notification');
+        const notificationText = document.getElementById('notificationText');
 
-        // Settings panel toggle
+        // Panel toggles
         settingsToggle.addEventListener('click', () => {
             settingsPanel.classList.toggle('open');
+            if (textInputPanel.classList.contains('open')) {
+                textInputPanel.classList.remove('open');
+            }
         });
+
+        textInputToggle.addEventListener('click', () => {
+            textInputPanel.classList.toggle('open');
+            if (settingsPanel.classList.contains('open')) {
+                settingsPanel.classList.remove('open');
+            }
+        });
+
+        // Text input functions
+        function sendText() {
+            const textInput = document.getElementById('textInput');
+            const text = textInput.value;
+            if (text) {
+                socket.emit('sendText', text);
+                textInput.value = '';
+            }
+        }
+
+        function clearText() {
+            document.getElementById('textInput').value = '';
+        }
 
         // Navigation function
         function navigate() {
@@ -158,13 +228,38 @@
                 },
                 extraArgs: document.getElementById('extraArgs').value.split(' ').filter(arg => arg)
             };
+            loadingOverlay.classList.remove('hidden');
             socket.emit('updateConfig', config);
         }
 
-        // Screen update handler
+        // Show notification
+        function showNotification(message, isError = true) {
+            notificationText.textContent = message;
+            notification.style.opacity = '1';
+            notification.firstElementChild.className = isError ? 
+                'bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg' :
+                'bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg';
+            setTimeout(() => {
+                notification.style.opacity = '0';
+            }, 3000);
+        }
+
+        // Socket event handlers
         socket.on('updateScreen', (data) => {
             screen.src = 'data:image/png;base64,' + data;
             loadingOverlay.classList.add('hidden');
+        });
+
+        socket.on('error', (data) => {
+            showNotification(data.message);
+            loadingOverlay.classList.add('hidden');
+        });
+
+        socket.on('configUpdated', (data) => {
+            if (data.success) {
+                showNotification('Settings updated successfully', false);
+                settingsPanel.classList.remove('open');
+            }
         });
 
         // Mouse interaction variables
@@ -188,95 +283,117 @@
 
         // Mouse event handlers
         screen.addEventListener('mousedown', (event) => {
-            event.preventDefault();
-            const coords = calculateCoordinates(event);
-            isDragging = true;
-            lastX = coords.x;
-            lastY = coords.y;
-            dragStarted = false;
+            if (event.target === screen) {
+                event.preventDefault();
+                const coords = calculateCoordinates(event);
+                isDragging = true;
+                lastX = coords.x;
+                lastY = coords.y;
+                dragStarted = false;
+            }
         });
 
         screen.addEventListener('mousemove', (event) => {
-            event.preventDefault();
-            const coords = calculateCoordinates(event);
-            
-            if (!isDragging) {
-                socket.emit('mouseMove', coords);
-                return;
+            if (event.target === screen) {
+                event.preventDefault();
+                const coords = calculateCoordinates(event);
+                
+                if (!isDragging) {
+                    socket.emit('mouseMove', coords);
+                    return;
+                }
+
+                const deltaX = Math.abs(coords.x - lastX);
+                const deltaY = Math.abs(coords.y - lastY);
+
+                if (!dragStarted && (deltaX > dragThreshold || deltaY > dragThreshold)) {
+                    dragStarted = true;
+                    socket.emit('dragStart', coords);
+                }
+
+                if (dragStarted) {
+                    socket.emit('dragMove', coords);
+                }
+
+                lastX = coords.x;
+                lastY = coords.y;
             }
-
-            const deltaX = Math.abs(coords.x - lastX);
-            const deltaY = Math.abs(coords.y - lastY);
-
-            if (!dragStarted && (deltaX > dragThreshold || deltaY > dragThreshold)) {
-                dragStarted = true;
-                socket.emit('dragStart', coords);
-            }
-
-            if (dragStarted) {
-                socket.emit('dragMove', coords);
-            }
-
-            lastX = coords.x;
-            lastY = coords.y;
         });
 
         screen.addEventListener('mouseup', (event) => {
-            event.preventDefault();
-            const coords = calculateCoordinates(event);
-            
-            if (isDragging) {
-                if (dragStarted) {
-                    socket.emit('dragEnd', coords);
-                } else {
-                    socket.emit('mouseClick', coords);
+            if (event.target === screen) {
+                event.preventDefault();
+                const coords = calculateCoordinates(event);
+                
+                if (isDragging) {
+                    if (dragStarted) {
+                        socket.emit('dragEnd', coords);
+                    } else {
+                        socket.emit('mouseClick', coords);
+                    }
                 }
+                
+                isDragging = false;
+                dragStarted = false;
             }
-            
-            isDragging = false;
-            dragStarted = false;
         });
 
         // Touch event handlers
         screen.addEventListener('touchstart', (event) => {
-            event.preventDefault();
-            const touch = event.touches[0];
-            const coords = calculateCoordinates(touch);
-            isDragging = true;
-            lastX = coords.x;
-            lastY = coords.y;
-            dragStarted = false;
+            if (event.target === screen) {
+                event.preventDefault();
+                const touch = event.touches[0];
+                const coords = calculateCoordinates(touch);
+                isDragging = true;
+                lastX = coords.x;
+                lastY = coords.y;
+                dragStarted = false;
+            }
         });
 
         screen.addEventListener('touchmove', (event) => {
-            event.preventDefault();
-            const touch = event.touches[0];
-            const coords = calculateCoordinates(touch);
-            
-            if (!dragStarted) {
-                dragStarted = true;
-                socket.emit('dragStart', coords);
+            if (event.target === screen) {
+                event.preventDefault();
+                const touch = event.touches[0];
+                const coords = calculateCoordinates(touch);
+                
+                if (!dragStarted) {
+                    dragStarted = true;
+                    socket.emit('dragStart', coords);
+                }
+                
+                socket.emit('dragMove', coords);
+                lastX = coords.x;
+                lastY = coords.y;
             }
-            
-            socket.emit('dragMove', coords);
-            lastX = coords.x;
-            lastY = coords.y;
         });
 
         screen.addEventListener('touchend', (event) => {
-            event.preventDefault();
-            if (dragStarted) {
-                socket.emit('dragEnd', { x: lastX, y: lastY });
-            } else {
-                socket.emit('mouseClick', { x: lastX, y: lastY });
+            if (event.target === screen) {
+                event.preventDefault();
+                if (dragStarted) {
+                    socket.emit('dragEnd', { x: lastX, y: lastY });
+                } else {
+                    socket.emit('mouseClick', { x: lastX, y: lastY });
+                }
+                isDragging = false;
+                dragStarted = false;
             }
-            isDragging = false;
-            dragStarted = false;
         });
 
-        // Keyboard event handler
-        document.addEventListener('keydown', (event) => {
-            socket.emit('keyPress', event.key);
+        // Enter key handler for URL input
+        document.getElementById('url').addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') {
+                navigate();
+            }
+        });
+
+        // Enter key handler for text input
+        document.getElementById('textInput').addEventListener('keypress', (event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendText();
+            }
         });
     </script>
 </body>
