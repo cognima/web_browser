@@ -233,7 +233,7 @@ io.on("connection", (socket) => {
 app.use(express.static("public"));
 
 // Start server
-const PORT = process.env.PORT || 8000;
+const PORT = process.env.PORT || 2020;
 server.listen(PORT, async () => {
     console.log(`Server running at http://localhost:${PORT}`);
     await startBrowser();
