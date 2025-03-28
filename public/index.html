@@ -1,46 +1,282 @@
 <!DOCTYPE html>
-<html lang="pt">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Navegador Remoto</title>
+    <title>Remote Browser Control</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'sans': ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
     <style>
-        #screen { width: 100%; height: auto; cursor: crosshair; }
+        /* Custom styles */
+        .settings-panel {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+        .settings-panel.open {
+            max-height: 500px;
+        }
     </style>
 </head>
-<body>
-    <input type="text" id="url" placeholder="Digite uma URL">
-    <button onclick="navigate()">Ir</button>
-    <br>
-    <img id="screen">
+<body class="bg-gray-100 font-sans min-h-screen">
+    <!-- Navigation Bar -->
+    <nav class="bg-white shadow-md">
+        <div class="container mx-auto px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                    <i class="fas fa-globe text-blue-600 text-2xl"></i>
+                    <h1 class="text-xl font-semibold text-gray-800">Remote Browser</h1>
+                </div>
+                <button id="settingsToggle" class="flex items-center space-x-2 px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                    <i class="fas fa-cog text-gray-600"></i>
+                    <span class="text-gray-600">Settings</span>
+                </button>
+            </div>
+        </div>
+    </nav>
 
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 py-6">
+        <!-- URL Navigation -->
+        <div class="bg-white rounded-lg shadow-md p-4 mb-4">
+            <div class="flex space-x-2">
+                <div class="flex-1">
+                    <input type="text" id="url" placeholder="Enter URL (e.g., https://www.google.com)" 
+                           class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <button onclick="navigate()" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                    <i class="fas fa-arrow-right mr-2"></i>Go
+                </button>
+            </div>
+        </div>
+
+        <!-- Settings Panel -->
+        <div id="settingsPanel" class="settings-panel bg-white rounded-lg shadow-md mb-4">
+            <div class="p-4">
+                <h2 class="text-lg font-semibold mb-4">Puppeteer Settings</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Headless Mode -->
+                    <div class="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                        <label class="text-gray-700">Headless Mode</label>
+                        <div class="relative inline-block w-12 h-6 transition duration-200 ease-in-out">
+                            <input type="checkbox" id="headlessMode" class="peer sr-only" checked>
+                            <span class="absolute inset-0 bg-gray-300 peer-checked:bg-blue-500 rounded-full transition-colors cursor-pointer"></span>
+                            <span class="absolute inset-0 w-4 h-4 m-1 bg-white rounded-full transition-transform transform peer-checked:translate-x-6"></span>
+                        </div>
+                    </div>
+                    <!-- FPS Control -->
+                    <div class="p-2 bg-gray-50 rounded-lg">
+                        <label class="text-gray-700 block mb-1">Capture FPS</label>
+                        <input type="number" id="fps" value="30" min="1" max="60" 
+                               class="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <!-- Viewport Width -->
+                    <div class="p-2 bg-gray-50 rounded-lg">
+                        <label class="text-gray-700 block mb-1">Viewport Width</label>
+                        <input type="number" id="viewportWidth" value="1280" min="320" max="3840" 
+                               class="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <!-- Viewport Height -->
+                    <div class="p-2 bg-gray-50 rounded-lg">
+                        <label class="text-gray-700 block mb-1">Viewport Height</label>
+                        <input type="number" id="viewportHeight" value="720" min="240" max="2160" 
+                               class="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                </div>
+                <!-- Extra Arguments -->
+                <div class="mt-4">
+                    <label class="text-gray-700 block mb-1">Extra Launch Arguments</label>
+                    <input type="text" id="extraArgs" placeholder="--disable-gpu --no-sandbox" 
+                           class="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <!-- Apply Button -->
+                <button onclick="updateConfig()" class="mt-4 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                    <i class="fas fa-check mr-2"></i>Apply Settings
+                </button>
+            </div>
+        </div>
+
+        <!-- Browser View -->
+        <div class="bg-white rounded-lg shadow-md p-4 relative">
+            <div id="loadingOverlay" class="hidden absolute inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center rounded-lg">
+                <div class="text-white text-center">
+                    <i class="fas fa-spinner fa-spin text-4xl mb-2"></i>
+                    <p>Loading...</p>
+                </div>
+            </div>
+            <img id="screen" class="w-full h-auto rounded-lg cursor-crosshair" draggable="false">
+        </div>
+    </main>
+
+    <!-- Socket.io -->
     <script src="/socket.io/socket.io.js"></script>
     <script>
+        // Socket.io connection
         const socket = io();
-        const screen = document.getElementById("screen");
+        const screen = document.getElementById('screen');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const settingsPanel = document.getElementById('settingsPanel');
+        const settingsToggle = document.getElementById('settingsToggle');
 
+        // Settings panel toggle
+        settingsToggle.addEventListener('click', () => {
+            settingsPanel.classList.toggle('open');
+        });
+
+        // Navigation function
         function navigate() {
-            const url = document.getElementById("url").value;
-            socket.emit("navigate", url);
+            const url = document.getElementById('url').value;
+            if (url) {
+                loadingOverlay.classList.remove('hidden');
+                socket.emit('navigate', url);
+            }
         }
 
-        socket.on("updateScreen", (data) => {
-            screen.src = "data:image/png;base64," + data;
+        // Update configuration
+        function updateConfig() {
+            const config = {
+                headless: document.getElementById('headlessMode').checked,
+                fps: parseInt(document.getElementById('fps').value),
+                viewport: {
+                    width: parseInt(document.getElementById('viewportWidth').value),
+                    height: parseInt(document.getElementById('viewportHeight').value)
+                },
+                extraArgs: document.getElementById('extraArgs').value.split(' ').filter(arg => arg)
+            };
+            socket.emit('updateConfig', config);
+        }
+
+        // Screen update handler
+        socket.on('updateScreen', (data) => {
+            screen.src = 'data:image/png;base64,' + data;
+            loadingOverlay.classList.add('hidden');
         });
 
-        screen.addEventListener("mousemove", (event) => {
+        // Mouse interaction variables
+        let isDragging = false;
+        let lastX = 0;
+        let lastY = 0;
+        let dragThreshold = 5;
+        let dragStarted = false;
+
+        // Calculate accurate coordinates
+        function calculateCoordinates(event) {
             const rect = screen.getBoundingClientRect();
-            const x = event.clientX - rect.left;
-            const y = event.clientY - rect.top;
-            socket.emit("mouseMove", { x, y });
+            const scaleX = screen.naturalWidth / rect.width;
+            const scaleY = screen.naturalHeight / rect.height;
+            
+            const x = (event.clientX - rect.left) * scaleX;
+            const y = (event.clientY - rect.top) * scaleY;
+            
+            return { x, y };
+        }
+
+        // Mouse event handlers
+        screen.addEventListener('mousedown', (event) => {
+            event.preventDefault();
+            const coords = calculateCoordinates(event);
+            isDragging = true;
+            lastX = coords.x;
+            lastY = coords.y;
+            dragStarted = false;
         });
 
-        screen.addEventListener("click", () => {
-            socket.emit("mouseClick");
+        screen.addEventListener('mousemove', (event) => {
+            event.preventDefault();
+            const coords = calculateCoordinates(event);
+            
+            if (!isDragging) {
+                socket.emit('mouseMove', coords);
+                return;
+            }
+
+            const deltaX = Math.abs(coords.x - lastX);
+            const deltaY = Math.abs(coords.y - lastY);
+
+            if (!dragStarted && (deltaX > dragThreshold || deltaY > dragThreshold)) {
+                dragStarted = true;
+                socket.emit('dragStart', coords);
+            }
+
+            if (dragStarted) {
+                socket.emit('dragMove', coords);
+            }
+
+            lastX = coords.x;
+            lastY = coords.y;
         });
 
-        document.addEventListener("keydown", (event) => {
-            socket.emit("keyPress", event.key);
+        screen.addEventListener('mouseup', (event) => {
+            event.preventDefault();
+            const coords = calculateCoordinates(event);
+            
+            if (isDragging) {
+                if (dragStarted) {
+                    socket.emit('dragEnd', coords);
+                } else {
+                    socket.emit('mouseClick', coords);
+                }
+            }
+            
+            isDragging = false;
+            dragStarted = false;
+        });
+
+        // Touch event handlers
+        screen.addEventListener('touchstart', (event) => {
+            event.preventDefault();
+            const touch = event.touches[0];
+            const coords = calculateCoordinates(touch);
+            isDragging = true;
+            lastX = coords.x;
+            lastY = coords.y;
+            dragStarted = false;
+        });
+
+        screen.addEventListener('touchmove', (event) => {
+            event.preventDefault();
+            const touch = event.touches[0];
+            const coords = calculateCoordinates(touch);
+            
+            if (!dragStarted) {
+                dragStarted = true;
+                socket.emit('dragStart', coords);
+            }
+            
+            socket.emit('dragMove', coords);
+            lastX = coords.x;
+            lastY = coords.y;
+        });
+
+        screen.addEventListener('touchend', (event) => {
+            event.preventDefault();
+            if (dragStarted) {
+                socket.emit('dragEnd', { x: lastX, y: lastY });
+            } else {
+                socket.emit('mouseClick', { x: lastX, y: lastY });
+            }
+            isDragging = false;
+            dragStarted = false;
+        });
+
+        // Keyboard event handler
+        document.addEventListener('keydown', (event) => {
+            socket.emit('keyPress', event.key);
         });
     </script>
 </body>
