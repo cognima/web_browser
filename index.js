@@ -8,60 +8,213 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 let browser, page;
+let captureInterval;
+let config = {
+    headless: 'new',
+    fps: 30,
+    viewport: {
+        width: 1280,
+        height: 720
+    },
+    extraArgs: ["--no-sandbox", "--disable-setuid-sandbox"]
+};
 
 async function startBrowser() {
-    browser = await puppeteer.launch({ headless: 'new', args: ["--no-sandbox", "--disable-setuid-sandbox"] });
-    page = await browser.newPage();
-    await page.goto("https://www.google.com");
+    try {
+        // Close existing browser if it exists
+        if (browser) {
+            await browser.close();
+        }
 
-    // Desativar limite de FPS para capturar imagens mais rápido
-    await page.evaluate(() => {
-        document.body.style.overflow = "hidden";
-    });
+        // Launch browser with current configuration
+        browser = await puppeteer.launch({
+            headless: config.headless,
+            args: config.extraArgs
+        });
 
-    // Iniciar captura de tela contínua
-    captureScreen();
-}
+        // Create new page and set viewport
+        page = await browser.newPage();
+        await page.setViewport(config.viewport);
 
-// Envia capturas de tela constantes para os clientes
-async function captureScreen() {
-    if (page) {
-        const screenshot = await page.screenshot({ encoding: "base64" });
-        io.emit("updateScreen", screenshot);
+        // Navigate to Google by default
+        await page.goto("https://www.google.com");
+
+        // Optimize page for capturing
+        await page.evaluate(() => {
+            document.body.style.overflow = "hidden";
+            // Disable smooth scrolling for better performance
+            document.documentElement.style.scrollBehavior = "auto";
+        });
+
+        // Start screen capture loop
+        startScreenCapture();
+
+        return true;
+    } catch (error) {
+        console.error("Error starting browser:", error);
+        return false;
     }
-    setTimeout(captureScreen, 30); // Captura a cada 30ms (~33 FPS)
 }
 
-// Captura eventos de teclado e mouse dos usuários
-io.on("connection", (socket) => {
-    console.log("Novo usuário conectado");
+function startScreenCapture() {
+    // Clear existing interval if it exists
+    if (captureInterval) {
+        clearInterval(captureInterval);
+    }
 
+    // Calculate interval based on FPS
+    const interval = Math.floor(1000 / config.fps);
+
+    // Start new capture loop
+    captureInterval = setInterval(async () => {
+        try {
+            if (page) {
+                const screenshot = await page.screenshot({ 
+                    encoding: "base64"// Slightly reduce quality for better performance
+                });
+                io.emit("updateScreen", screenshot);
+            }
+        } catch (error) {
+            console.error("Screenshot error:", error);
+        }
+    }, interval);
+}
+
+// Socket.io connection handler
+io.on("connection", (socket) => {
+    console.log("New client connected");
+
+    // Navigation handler
     socket.on("navigate", async (url) => {
-        if (page) {
-            await page.goto(url);
+        try {
+            if (page) {
+                await page.goto(url);
+                console.log("Navigated to:", url);
+            }
+        } catch (error) {
+            console.error("Navigation error:", error);
         }
     });
 
+    // Mouse movement handler
     socket.on("mouseMove", async ({ x, y }) => {
-        if (page) await page.mouse.move(x, y);
+        try {
+            if (page) {
+                await page.mouse.move(x, y);
+            }
+        } catch (error) {
+            console.error("Mouse move error:", error);
+        }
     });
 
-    socket.on("mouseClick", async () => {
-        if (page) await page.mouse.click();
+    // Mouse click handler
+    socket.on("mouseClick", async ({ x, y }) => {
+        try {
+            if (page) {
+                await page.mouse.click(x, y);
+            }
+        } catch (error) {
+            console.error("Mouse click error:", error);
+        }
     });
 
+    // Drag event handlers
+    socket.on("dragStart", async ({ x, y }) => {
+        try {
+            if (page) {
+                await page.mouse.move(x, y);
+                await page.mouse.down();
+            }
+        } catch (error) {
+            console.error("Drag start error:", error);
+        }
+    });
+
+    socket.on("dragMove", async ({ x, y }) => {
+        try {
+            if (page) {
+                await page.mouse.move(x, y);
+            }
+        } catch (error) {
+            console.error("Drag move error:", error);
+        }
+    });
+
+    socket.on("dragEnd", async ({ x, y }) => {
+        try {
+            if (page) {
+                await page.mouse.move(x, y);
+                await page.mouse.up();
+            }
+        } catch (error) {
+            console.error("Drag end error:", error);
+        }
+    });
+
+    // Keyboard handler
     socket.on("keyPress", async (key) => {
-        if (page) await page.keyboard.press(key);
+        try {
+            if (page) {
+                await page.keyboard.press(key);
+            }
+        } catch (error) {
+            console.error("Keyboard press error:", error);
+        }
     });
 
+    // Add text input handler
+    socket.on("typeText", async (text) => {
+        try {
+            if (page) {
+                await page.keyboard.type(text);
+            }
+        } catch (error) {
+            console.error("Text input error:", error);
+        }
+    });
+
+    // Configuration update handler
+    socket.on("updateConfig", async (newConfig) => {
+        try {
+            // Update configuration
+            config = {
+                ...config,
+                ...newConfig,
+                extraArgs: [...config.extraArgs, ...(newConfig.extraArgs || [])]
+            };
+
+            // Restart browser with new configuration
+            const success = await startBrowser();
+            if (success) {
+                console.log("Browser restarted with new configuration");
+            } else {
+                console.error("Failed to restart browser with new configuration");
+            }
+        } catch (error) {
+            console.error("Configuration update error:", error);
+        }
+    });
+
+    // Disconnect handler
     socket.on("disconnect", () => {
-        console.log("Usuário desconectado");
+        console.log("Client disconnected");
     });
 });
 
-// Iniciar servidor
+// Serve static files
 app.use(express.static("public"));
-server.listen(2020, async () => {
-    console.log("Servidor rodando em http://localhost:2020");
+
+// Start server
+const PORT = process.env.PORT || 8000;
+server.listen(PORT, async () => {
+    console.log(`Server running at http://localhost:${PORT}`);
     await startBrowser();
+});
+
+// Handle process termination
+process.on("SIGINT", async () => {
+    if (browser) {
+        await browser.close();
+    }
+    process.exit();
 });
