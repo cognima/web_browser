@@ -1,7 +1,7 @@
 {
   "name": "web-browser-remote-control",
   "version": "1.1.0",
-  "description": "A web-based remote browser control with real-time streaming and touch support",
+  "description": "A web-based remote browser control application",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
@@ -9,19 +9,8 @@
   },
   "dependencies": {
     "express": "^4.18.2",
+    "nodemon": "^3.0.1",
     "puppeteer": "^21.0.0",
     "socket.io": "^4.7.0"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.1"
-  },
-  "keywords": [
-    "puppeteer",
-    "browser-control",
-    "remote-browser",
-    "websockets",
-    "real-time"
-  ],
-  "author": "Hiudy",
-  "license": "MIT"
+  }
 }
